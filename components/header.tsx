@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ModeToggle } from "@/components/mode-toggle"
-import { Leaf, Menu, X } from "lucide-react"
+import { Leaf, Menu, X, Shield, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuthContext } from "@/components/auth/auth-provider"
 
@@ -13,7 +13,7 @@ export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const pathname = usePathname()
-  const { user, logout } = useAuthContext()
+  const { user, userData, logout } = useAuthContext()
 
   // Handle scroll effect
   useEffect(() => {
@@ -39,6 +39,8 @@ export function Header() {
     { name: "NFTs", href: "/nfts" },
     { name: "Learn", href: "/learn" },
   ]
+
+  const isAdmin = userData?.role === "admin" || userData?.role === "super_admin"
 
   return (
     <header
@@ -84,9 +86,24 @@ export function Header() {
               <Button variant="ghost" size="sm" onClick={handleLogout}>
                 Sign Out
               </Button>
-              <Button asChild>
-                <Link href="/dashboard">Dashboard</Link>
-              </Button>
+              {isAdmin ? (
+                <Button
+                  asChild
+                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                >
+                  <Link href="/admin">
+                    <Shield className="h-4 w-4 mr-2" />
+                    Admin Panel
+                  </Link>
+                </Button>
+              ) : (
+                <Button asChild>
+                  <Link href="/user">
+                    <User className="h-4 w-4 mr-2" />
+                    My Profile
+                  </Link>
+                </Button>
+              )}
             </div>
           ) : (
             <Button asChild>
@@ -126,9 +143,24 @@ export function Header() {
                   <Button variant="ghost" size="sm" onClick={handleLogout} className="justify-start">
                     Sign Out
                   </Button>
-                  <Button asChild>
-                    <Link href="/dashboard">Dashboard</Link>
-                  </Button>
+                  {isAdmin ? (
+                    <Button
+                      asChild
+                      className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                    >
+                      <Link href="/admin">
+                        <Shield className="h-4 w-4 mr-2" />
+                        Admin Panel
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button asChild>
+                      <Link href="/user">
+                        <User className="h-4 w-4 mr-2" />
+                        My Profile
+                      </Link>
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <Button asChild className="w-full">

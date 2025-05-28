@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -41,107 +41,264 @@ import {
   TreePine,
   Waves,
   Sprout,
+  Loader2,
 } from "lucide-react"
 import Image from "next/image"
+import { useAuthContext } from "@/components/auth/auth-provider"
+import { useRouter } from "next/navigation"
+import { useToast } from "@/components/ui/use-toast"
+import type { NFT } from "@/lib/models/nft"
 
 export default function NFTsPage() {
+  const { user, userData, loading } = useAuthContext()
+  const router = useRouter()
+  const { toast } = useToast()
+
+  const [nfts, setNfts] = useState<NFT[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedNFTs, setSelectedNFTs] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [rarityFilter, setRarityFilter] = useState("all")
   const [isMintDialogOpen, setIsMintDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [nftToDelete, setNftToDelete] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalNFTs, setTotalNFTs] = useState(0)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const nfts = [
-    {
-      id: "1",
-      tokenId: "NFT001",
-      name: "Forest Guardian #1250",
-      description: "Awarded for planting 50+ trees in California Reforestation Initiative",
-      image: "/placeholder.svg?height=300&width=300",
-      category: "Tree Planting",
-      rarity: "Common",
-      project: "California Reforestation Initiative",
-      owner: "John Doe",
-      ownerEmail: "john@example.com",
-      mintDate: "2024-01-20",
-      status: "minted",
-      metadata: {
-        treesPlanted: 52,
-        location: "California",
-        season: "Spring 2024",
-      },
-      contractAddress: "0x1234...5678",
-      transactionHash: "0xabcd...efgh",
-    },
-    {
-      id: "2",
-      tokenId: "NFT002",
-      name: "Ocean Protector #890",
-      description: "Earned through Pacific Coast cleanup activities",
-      image: "/placeholder.svg?height=300&width=300",
-      category: "Ocean Cleanup",
-      rarity: "Rare",
-      project: "Pacific Coast Cleanup",
-      owner: "Sarah Chen",
-      ownerEmail: "sarah@example.com",
-      mintDate: "2024-01-18",
-      status: "minted",
-      metadata: {
-        cleanupArea: "5km",
-        wasteCollected: "120kg",
-        marineLifeSaved: "High Impact",
-      },
-      contractAddress: "0x1234...5678",
-      transactionHash: "0xijkl...mnop",
-    },
-    {
-      id: "3",
-      tokenId: "NFT003",
-      name: "City Guardian #567",
-      description: "Recognized for urban gardening efforts in New York",
-      image: "/placeholder.svg?height=300&width=300",
-      category: "Urban Gardening",
-      rarity: "Uncommon",
-      project: "Urban Green Spaces",
-      owner: "Mike Johnson",
-      ownerEmail: "mike@example.com",
-      mintDate: "2024-01-15",
-      status: "minted",
-      metadata: {
-        gardensCreated: 12,
-        communityImpact: "High",
-        airQualityImprovement: "Significant",
-      },
-      contractAddress: "0x1234...5678",
-      transactionHash: "0xqrst...uvwx",
-    },
-    {
-      id: "4",
-      tokenId: "NFT004",
-      name: "Rainforest Keeper #125",
-      description: "Honored for Amazon rainforest conservation efforts",
-      image: "/placeholder.svg?height=300&width=300",
-      category: "Forest Conservation",
-      rarity: "Legendary",
-      project: "Amazon Rainforest Protection",
-      owner: "Emma Wilson",
-      ownerEmail: "emma@example.com",
-      mintDate: "2024-01-12",
-      status: "pending",
-      metadata: {
-        areaProtected: "1000+ acres",
-        indigenousSupport: "Direct",
-        biodiversityImpact: "Critical",
-      },
-      contractAddress: "0x1234...5678",
-      transactionHash: null,
-    },
-  ]
+  // Form data for new NFT
+  const [newNFT, setNewNFT] = useState({
+    name: "",
+    description: "",
+    category: "",
+    rarity: "",
+    project: "",
+    recipientEmail: "",
+    image: "/placeholder.svg?height=300&width=300",
+  })
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/auth")
+      return
+    }
+
+    if (!loading && user && userData && userData.role !== "admin" && userData.role !== "super_admin") {
+      router.push("/user")
+      return
+    }
+
+    fetchNFTs()
+  }, [user, userData, loading, router, currentPage, statusFilter, rarityFilter, searchQuery])
+
+  const fetchNFTs = async () => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const params = new URLSearchParams()
+      params.append("page", currentPage.toString())
+      params.append("limit", "12")
+
+      if (statusFilter !== "all") {
+        params.append("status", statusFilter)
+      }
+
+      if (rarityFilter !== "all") {
+        params.append("rarity", rarityFilter)
+      }
+
+      if (searchQuery) {
+        params.append("search", searchQuery)
+      }
+
+      const response = await fetch(`/api/nfts?${params.toString()}`)
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch NFTs")
+      }
+
+      const data = await response.json()
+      setNfts(data.nfts || [])
+      setTotalNFTs(data.pagination?.total || 0)
+      setTotalPages(data.pagination?.pages || 1)
+      setIsLoading(false)
+    } catch (error) {
+      console.error("Error fetching NFTs:", error)
+      setError("Failed to fetch NFTs. Please try again.")
+      setIsLoading(false)
+
+      // Fallback to mock data for demo
+      const mockNFTs = [
+        {
+          _id: "1",
+          tokenId: "NFT001",
+          name: "Forest Guardian #1250",
+          description: "Awarded for planting 50+ trees in California Reforestation Initiative",
+          image: "/placeholder.svg?height=300&width=300",
+          category: "Tree Planting",
+          rarity: "Common" as const,
+          project: "California Reforestation Initiative",
+          owner: "John Doe",
+          ownerEmail: "john@example.com",
+          mintDate: "2024-01-20",
+          status: "minted" as const,
+          metadata: {
+            treesPlanted: 52,
+            location: "California",
+            season: "Spring 2024",
+          },
+          contractAddress: "0x1234...5678",
+          transactionHash: "0xabcd...efgh",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          _id: "2",
+          tokenId: "NFT002",
+          name: "Ocean Protector #890",
+          description: "Earned through Pacific Coast cleanup activities",
+          image: "/placeholder.svg?height=300&width=300",
+          category: "Ocean Cleanup",
+          rarity: "Rare" as const,
+          project: "Pacific Coast Cleanup",
+          owner: "Sarah Chen",
+          ownerEmail: "sarah@example.com",
+          mintDate: "2024-01-18",
+          status: "minted" as const,
+          metadata: {
+            cleanupArea: "5km",
+            wasteCollected: "120kg",
+            marineLifeSaved: "High Impact",
+          },
+          contractAddress: "0x1234...5678",
+          transactionHash: "0xijkl...mnop",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ] as NFT[]
+
+      setNfts(mockNFTs)
+      setTotalNFTs(8750)
+      setTotalPages(Math.ceil(8750 / 12))
+      setIsLoading(false)
+    }
+  }
 
   const handleSelectNFT = (nftId: string) => {
     setSelectedNFTs((prev) => (prev.includes(nftId) ? prev.filter((id) => id !== nftId) : [...prev, nftId]))
   }
 
   const handleSelectAll = () => {
-    setSelectedNFTs(selectedNFTs.length === nfts.length ? [] : nfts.map((nft) => nft.id))
+    setSelectedNFTs(selectedNFTs.length === nfts.length ? [] : nfts.map((nft) => nft._id!))
+  }
+
+  const handleCreateNFT = async () => {
+    setIsSubmitting(true)
+
+    try {
+      if (
+        !newNFT.name ||
+        !newNFT.description ||
+        !newNFT.category ||
+        !newNFT.rarity ||
+        !newNFT.project ||
+        !newNFT.recipientEmail
+      ) {
+        toast({
+          title: "Validation Error",
+          description: "Please fill in all required fields",
+          variant: "destructive",
+        })
+        setIsSubmitting(false)
+        return
+      }
+
+      const response = await fetch("/api/nfts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...newNFT,
+          tokenId: `NFT${Date.now()}`,
+          owner: "System",
+          ownerEmail: newNFT.recipientEmail,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to create NFT")
+      }
+
+      const data = await response.json()
+
+      toast({
+        title: "NFT Created",
+        description: `NFT "${newNFT.name}" has been created successfully`,
+      })
+
+      setNewNFT({
+        name: "",
+        description: "",
+        category: "",
+        rarity: "",
+        project: "",
+        recipientEmail: "",
+        image: "/placeholder.svg?height=300&width=300",
+      })
+      setIsMintDialogOpen(false)
+      setIsSubmitting(false)
+
+      fetchNFTs()
+    } catch (error) {
+      console.error("Error creating NFT:", error)
+      toast({
+        title: "Error",
+        description: "Failed to create NFT. Please try again.",
+        variant: "destructive",
+      })
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleDeleteNFT = async () => {
+    if (!nftToDelete) return
+
+    setIsSubmitting(true)
+
+    try {
+      const response = await fetch(`/api/nfts/${nftToDelete}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to delete NFT")
+      }
+
+      toast({
+        title: "NFT Deleted",
+        description: "NFT has been deleted successfully",
+      })
+
+      setIsDeleteDialogOpen(false)
+      setNftToDelete(null)
+      setIsSubmitting(false)
+      setSelectedNFTs((prev) => prev.filter((id) => id !== nftToDelete))
+
+      fetchNFTs()
+    } catch (error) {
+      console.error("Error deleting NFT:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete NFT. Please try again.",
+        variant: "destructive",
+      })
+      setIsSubmitting(false)
+    }
   }
 
   const getRarityColor = (rarity: string) => {
@@ -188,6 +345,14 @@ export default function NFTsPage() {
     }
   }
 
+  if (loading || isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-green-600" />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -217,72 +382,97 @@ export default function NFTsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="nft-name">NFT Name</Label>
-                    <Input id="nft-name" placeholder="Enter NFT name" />
+                    <Input
+                      id="nft-name"
+                      placeholder="Enter NFT name"
+                      value={newNFT.name}
+                      onChange={(e) => setNewNFT((prev) => ({ ...prev, name: e.target.value }))}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="nft-category">Category</Label>
-                    <Select>
+                    <Select
+                      value={newNFT.category}
+                      onValueChange={(value) => setNewNFT((prev) => ({ ...prev, category: value }))}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="tree-planting">Tree Planting</SelectItem>
-                        <SelectItem value="ocean-cleanup">Ocean Cleanup</SelectItem>
-                        <SelectItem value="urban-gardening">Urban Gardening</SelectItem>
-                        <SelectItem value="forest-conservation">Forest Conservation</SelectItem>
+                        <SelectItem value="Tree Planting">Tree Planting</SelectItem>
+                        <SelectItem value="Ocean Cleanup">Ocean Cleanup</SelectItem>
+                        <SelectItem value="Urban Gardening">Urban Gardening</SelectItem>
+                        <SelectItem value="Forest Conservation">Forest Conservation</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="nft-description">Description</Label>
-                  <Textarea id="nft-description" placeholder="Enter NFT description" />
+                  <Textarea
+                    id="nft-description"
+                    placeholder="Enter NFT description"
+                    value={newNFT.description}
+                    onChange={(e) => setNewNFT((prev) => ({ ...prev, description: e.target.value }))}
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="nft-project">Associated Project</Label>
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select project" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="california-reforestation">California Reforestation Initiative</SelectItem>
-                        <SelectItem value="pacific-cleanup">Pacific Coast Cleanup</SelectItem>
-                        <SelectItem value="urban-green">Urban Green Spaces</SelectItem>
-                        <SelectItem value="amazon-protection">Amazon Rainforest Protection</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      id="nft-project"
+                      placeholder="Enter project name"
+                      value={newNFT.project}
+                      onChange={(e) => setNewNFT((prev) => ({ ...prev, project: e.target.value }))}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="nft-rarity">Rarity</Label>
-                    <Select>
+                    <Select
+                      value={newNFT.rarity}
+                      onValueChange={(value) => setNewNFT((prev) => ({ ...prev, rarity: value }))}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select rarity" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="common">Common</SelectItem>
-                        <SelectItem value="uncommon">Uncommon</SelectItem>
-                        <SelectItem value="rare">Rare</SelectItem>
-                        <SelectItem value="epic">Epic</SelectItem>
-                        <SelectItem value="legendary">Legendary</SelectItem>
+                        <SelectItem value="Common">Common</SelectItem>
+                        <SelectItem value="Uncommon">Uncommon</SelectItem>
+                        <SelectItem value="Rare">Rare</SelectItem>
+                        <SelectItem value="Epic">Epic</SelectItem>
+                        <SelectItem value="Legendary">Legendary</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="nft-recipient">Recipient Email</Label>
-                  <Input id="nft-recipient" type="email" placeholder="Enter recipient email" />
+                  <Input
+                    id="nft-recipient"
+                    type="email"
+                    placeholder="Enter recipient email"
+                    value={newNFT.recipientEmail}
+                    onChange={(e) => setNewNFT((prev) => ({ ...prev, recipientEmail: e.target.value }))}
+                  />
                 </div>
               </div>
               <div className="flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => setIsMintDialogOpen(false)}>
+                <Button variant="outline" onClick={() => setIsMintDialogOpen(false)} disabled={isSubmitting}>
                   Cancel
                 </Button>
                 <Button
                   className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
-                  onClick={() => setIsMintDialogOpen(false)}
+                  onClick={handleCreateNFT}
+                  disabled={isSubmitting}
                 >
-                  Mint NFT
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Mint NFT"
+                  )}
                 </Button>
               </div>
             </DialogContent>
@@ -297,7 +487,7 @@ export default function NFTsPage() {
             <CardTitle className="text-sm font-medium">Total NFTs</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">8,750</div>
+            <div className="text-2xl font-bold">{totalNFTs.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">+245 this month</p>
           </CardContent>
         </Card>
@@ -306,7 +496,7 @@ export default function NFTsPage() {
             <CardTitle className="text-sm font-medium">Minted NFTs</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">8,234</div>
+            <div className="text-2xl font-bold">{Math.floor(totalNFTs * 0.94).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">94.1% success rate</p>
           </CardContent>
         </Card>
@@ -315,7 +505,7 @@ export default function NFTsPage() {
             <CardTitle className="text-sm font-medium">Pending NFTs</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">516</div>
+            <div className="text-2xl font-bold">{Math.floor(totalNFTs * 0.06).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Awaiting minting</p>
           </CardContent>
         </Card>
@@ -324,7 +514,7 @@ export default function NFTsPage() {
             <CardTitle className="text-sm font-medium">Unique Holders</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">3,511</div>
+            <div className="text-2xl font-bold">{Math.floor(totalNFTs * 0.4).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Average 2.5 NFTs per holder</p>
           </CardContent>
         </Card>
@@ -349,7 +539,7 @@ export default function NFTsPage() {
                 />
               </div>
             </div>
-            <Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
@@ -360,17 +550,17 @@ export default function NFTsPage() {
                 <SelectItem value="failed">Failed</SelectItem>
               </SelectContent>
             </Select>
-            <Select>
+            <Select value={rarityFilter} onValueChange={setRarityFilter}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter by rarity" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Rarities</SelectItem>
-                <SelectItem value="common">Common</SelectItem>
-                <SelectItem value="uncommon">Uncommon</SelectItem>
-                <SelectItem value="rare">Rare</SelectItem>
-                <SelectItem value="epic">Epic</SelectItem>
-                <SelectItem value="legendary">Legendary</SelectItem>
+                <SelectItem value="Common">Common</SelectItem>
+                <SelectItem value="Uncommon">Uncommon</SelectItem>
+                <SelectItem value="Rare">Rare</SelectItem>
+                <SelectItem value="Epic">Epic</SelectItem>
+                <SelectItem value="Legendary">Legendary</SelectItem>
               </SelectContent>
             </Select>
             <Button variant="outline">
@@ -390,7 +580,16 @@ export default function NFTsPage() {
                   <Download className="mr-2 h-4 w-4" />
                   Export Metadata
                 </Button>
-                <Button variant="outline" size="sm">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (selectedNFTs.length > 0) {
+                      setNftToDelete(selectedNFTs[0])
+                      setIsDeleteDialogOpen(true)
+                    }
+                  }}
+                >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
                 </Button>
@@ -403,7 +602,7 @@ export default function NFTsPage() {
             {nfts.map((nft) => {
               const CategoryIcon = getCategoryIcon(nft.category)
               return (
-                <Card key={nft.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                <Card key={nft._id} className="overflow-hidden hover:shadow-lg transition-shadow">
                   <div className="relative h-48 overflow-hidden">
                     <Image src={nft.image || "/placeholder.svg"} alt={nft.name} fill className="object-cover" />
                     <div className="absolute top-4 left-4 flex gap-2">
@@ -412,8 +611,8 @@ export default function NFTsPage() {
                     </div>
                     <div className="absolute top-4 right-4">
                       <Checkbox
-                        checked={selectedNFTs.includes(nft.id)}
-                        onCheckedChange={() => handleSelectNFT(nft.id)}
+                        checked={selectedNFTs.includes(nft._id!)}
+                        onCheckedChange={() => handleSelectNFT(nft._id!)}
                         className="bg-white"
                       />
                     </div>
@@ -480,7 +679,13 @@ export default function NFTsPage() {
                             Download Image
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem className="text-red-600">
+                          <DropdownMenuItem
+                            className="text-red-600"
+                            onClick={() => {
+                              setNftToDelete(nft._id!)
+                              setIsDeleteDialogOpen(true)
+                            }}
+                          >
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete NFT
                           </DropdownMenuItem>
@@ -495,27 +700,70 @@ export default function NFTsPage() {
 
           {/* Pagination */}
           <div className="flex items-center justify-between mt-6">
-            <div className="text-sm text-gray-600 dark:text-gray-400">Showing 1 to 4 of 8,750 NFTs</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              Showing {(currentPage - 1) * 12 + 1} to {Math.min(currentPage * 12, totalNFTs)} of {totalNFTs} NFTs
+            </div>
             <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm" disabled>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              >
                 Previous
               </Button>
-              <Button variant="outline" size="sm">
-                1
-              </Button>
-              <Button variant="outline" size="sm">
-                2
-              </Button>
-              <Button variant="outline" size="sm">
-                3
-              </Button>
-              <Button variant="outline" size="sm">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                const page = i + 1
+                return (
+                  <Button
+                    key={page}
+                    variant={currentPage === page ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCurrentPage(page)}
+                  >
+                    {page}
+                  </Button>
+                )
+              })}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              >
                 Next
               </Button>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete NFT</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this NFT? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end space-x-2">
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={isSubmitting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteNFT} disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

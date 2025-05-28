@@ -207,10 +207,10 @@ export default function AuthPage() {
               router.push("/admin")
             }, 1500)
           } else {
-            console.log("Regular user, redirecting to dashboard...")
+            console.log("Regular user, redirecting to user page...")
             setSuccess("Login successful! Redirecting...")
             setTimeout(() => {
-              router.push("/dashboard")
+              router.push("/user")
             }, 1500)
           }
         } else if (result.error) {
@@ -232,7 +232,7 @@ export default function AuthPage() {
           } else {
             setSuccess("Account created successfully! Redirecting...")
             setTimeout(() => {
-              router.push("/dashboard")
+              router.push("/user")
             }, 1500)
           }
         } else if (result.error) {
@@ -274,7 +274,7 @@ export default function AuthPage() {
         } else {
           setSuccess("Google sign-in successful! Redirecting...")
           setTimeout(() => {
-            router.push("/dashboard")
+            router.push("/user")
           }, 1500)
         }
       }
@@ -312,7 +312,7 @@ export default function AuthPage() {
         } else {
           setSuccess("Twitter sign-in successful! Redirecting...")
           setTimeout(() => {
-            router.push("/dashboard")
+            router.push("/user")
           }, 1500)
         }
       }
