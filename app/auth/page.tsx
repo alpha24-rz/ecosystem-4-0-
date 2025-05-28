@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Leaf, Mail, Lock, User, Eye, EyeOff, AlertCircle, CheckCircle2, Shield } from "lucide-react"
+import { Leaf, Mail, Lock, User, Eye, EyeOff, AlertCircle, CheckCircle2, Shield, Settings } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { useAuthContext } from "@/components/auth/auth-provider"
@@ -26,6 +26,7 @@ export default function AuthPage() {
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [isAdminLogin, setIsAdminLogin] = useState(false)
+  const [configError, setConfigError] = useState("")
 
   // Form data
   const [formData, setFormData] = useState({
@@ -35,6 +36,32 @@ export default function AuthPage() {
     confirmPassword: "",
     acceptTerms: false,
   })
+
+  // Check Firebase configuration on component mount
+  useEffect(() => {
+    const checkFirebaseConfig = async () => {
+      try {
+        const { firebaseConfig } = await import("@/lib/firebase")
+
+        if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "your_api_key_here") {
+          setConfigError("Firebase API key is not configured. Please check your environment variables.")
+          return
+        }
+
+        if (!firebaseConfig.projectId || firebaseConfig.projectId === "your_project_id") {
+          setConfigError("Firebase project ID is not configured. Please check your environment variables.")
+          return
+        }
+
+        console.log("Firebase configuration is valid")
+      } catch (error) {
+        console.error("Firebase configuration error:", error)
+        setConfigError("Firebase configuration error. Please check your setup.")
+      }
+    }
+
+    checkFirebaseConfig()
+  }, [])
 
   // Redirect if user is already authenticated
   useEffect(() => {
@@ -79,7 +106,12 @@ export default function AuthPage() {
   }
 
   const getFirebaseErrorMessage = (errorCode: string) => {
+    console.log("Firebase error code:", errorCode)
+
     switch (errorCode) {
+      case "auth/api-key-not-valid":
+      case "auth/invalid-api-key":
+        return "Firebase configuration error. Please contact support."
       case "auth/user-not-found":
         return "No account found with this email address."
       case "auth/wrong-password":
@@ -90,6 +122,8 @@ export default function AuthPage() {
         return "Password should be at least 6 characters long."
       case "auth/invalid-email":
         return "Please enter a valid email address."
+      case "auth/invalid-credential":
+        return "Invalid email or password. Please check your credentials."
       case "auth/too-many-requests":
         return "Too many failed attempts. Please try again later."
       case "auth/network-request-failed":
@@ -99,7 +133,7 @@ export default function AuthPage() {
       case "auth/cancelled-popup-request":
         return "Only one popup request is allowed at a time."
       default:
-        return "An error occurred. Please try again."
+        return `Authentication error: ${errorCode || "Unknown error"}`
     }
   }
 
@@ -139,79 +173,100 @@ export default function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // Check for configuration errors first
+    if (configError) {
+      setError(configError)
+      return
+    }
+
     if (!validateForm()) return
 
     setLoading(true)
     setError("")
 
     try {
+      console.log("Starting authentication process...")
+      console.log("Email:", formData.email)
+      console.log("Is admin email:", checkIfAdminEmail(formData.email))
+
       let result
 
       if (isLogin) {
+        console.log("Attempting sign in...")
         result = await signIn(formData.email, formData.password)
+        console.log("Sign in result:", result)
 
         if (result.user && !result.error) {
-          // Check user role and redirect accordingly
-          const { checkAdminStatus } = await import("@/lib/admin-utils")
-          const adminStatus = await checkAdminStatus(result.user.uid)
+          console.log("Sign in successful, checking admin status...")
 
-          if (adminStatus.isAdmin) {
+          // For admin emails, redirect to admin panel
+          if (checkIfAdminEmail(formData.email)) {
+            console.log("Admin email detected, redirecting to admin panel...")
             setSuccess("Admin login successful! Redirecting to admin panel...")
             setTimeout(() => {
               router.push("/admin")
             }, 1500)
           } else {
+            console.log("Regular user, redirecting to dashboard...")
             setSuccess("Login successful! Redirecting...")
             setTimeout(() => {
               router.push("/dashboard")
             }, 1500)
           }
+        } else if (result.error) {
+          console.error("Sign in error:", result.error)
+          setError(getFirebaseErrorMessage(result.error))
         }
       } else {
+        console.log("Attempting sign up...")
         result = await signUp(formData.email, formData.password, formData.name.trim())
+        console.log("Sign up result:", result)
 
         if (result.user && !result.error) {
-          // Check if this is an admin email and upgrade if needed
+          console.log("Sign up successful...")
+
+          // For admin emails during signup, we'll handle admin role assignment later
           if (checkIfAdminEmail(formData.email)) {
-            const { createAdminUser } = await import("@/lib/admin-utils")
-            await createAdminUser(result.user.uid, formData.email, formData.name.trim(), "admin", "system")
-            setSuccess("Admin account created successfully! Redirecting to admin panel...")
-            setTimeout(() => {
-              router.push("/admin")
-            }, 1500)
+            console.log("Admin email signup, will need manual role assignment...")
+            setSuccess("Account created! Please contact system administrator to activate admin privileges.")
           } else {
             setSuccess("Account created successfully! Redirecting...")
             setTimeout(() => {
               router.push("/dashboard")
             }, 1500)
           }
+        } else if (result.error) {
+          console.error("Sign up error:", result.error)
+          setError(getFirebaseErrorMessage(result.error))
         }
       }
-
-      if (result.error) {
-        setError(getFirebaseErrorMessage(result.error))
-      }
     } catch (error: any) {
-      setError(getFirebaseErrorMessage(error.code || error.message))
+      console.error("Authentication error:", error)
+      setError(getFirebaseErrorMessage(error.code || error.message || "Unknown error"))
     } finally {
       setLoading(false)
     }
   }
 
   const handleGoogleSignIn = async () => {
+    if (configError) {
+      setError(configError)
+      return
+    }
+
     setLoading(true)
     setError("")
 
     try {
+      console.log("Attempting Google sign in...")
       const result = await signInWithGoogle()
+      console.log("Google sign in result:", result)
+
       if (result.error) {
         setError(getFirebaseErrorMessage(result.error))
-      } else {
-        // Check user role and redirect accordingly
-        const { checkAdminStatus } = await import("@/lib/admin-utils")
-        const adminStatus = await checkAdminStatus(result.user!.uid)
-
-        if (adminStatus.isAdmin) {
+      } else if (result.user) {
+        // Check if this is an admin email
+        if (checkIfAdminEmail(result.user.email || "")) {
           setSuccess("Admin Google sign-in successful! Redirecting to admin panel...")
           setTimeout(() => {
             router.push("/admin")
@@ -224,6 +279,7 @@ export default function AuthPage() {
         }
       }
     } catch (error: any) {
+      console.error("Google sign in error:", error)
       setError(getFirebaseErrorMessage(error.code || error.message))
     } finally {
       setLoading(false)
@@ -231,19 +287,24 @@ export default function AuthPage() {
   }
 
   const handleTwitterSignIn = async () => {
+    if (configError) {
+      setError(configError)
+      return
+    }
+
     setLoading(true)
     setError("")
 
     try {
+      console.log("Attempting Twitter sign in...")
       const result = await signInWithTwitter()
+      console.log("Twitter sign in result:", result)
+
       if (result.error) {
         setError(getFirebaseErrorMessage(result.error))
-      } else {
-        // Check user role and redirect accordingly
-        const { checkAdminStatus } = await import("@/lib/admin-utils")
-        const adminStatus = await checkAdminStatus(result.user!.uid)
-
-        if (adminStatus.isAdmin) {
+      } else if (result.user) {
+        // Check if this is an admin email
+        if (checkIfAdminEmail(result.user.email || "")) {
           setSuccess("Admin Twitter sign-in successful! Redirecting to admin panel...")
           setTimeout(() => {
             router.push("/admin")
@@ -256,6 +317,7 @@ export default function AuthPage() {
         }
       }
     } catch (error: any) {
+      console.error("Twitter sign in error:", error)
       setError(getFirebaseErrorMessage(error.code || error.message))
     } finally {
       setLoading(false)
@@ -274,6 +336,32 @@ export default function AuthPage() {
       acceptTerms: false,
     })
     setIsAdminLogin(false)
+  }
+
+  // Show configuration error if Firebase is not properly set up
+  if (configError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-100 dark:from-gray-900 dark:to-red-900/20 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md p-6">
+          <div className="text-center space-y-4">
+            <div className="flex justify-center">
+              <Settings className="h-12 w-12 text-red-500" />
+            </div>
+            <h1 className="text-2xl font-bold text-red-700">Configuration Error</h1>
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{configError}</AlertDescription>
+            </Alert>
+            <p className="text-sm text-muted-foreground">
+              Please contact your system administrator to resolve this issue.
+            </p>
+            <Button onClick={() => window.location.reload()} variant="outline">
+              Retry
+            </Button>
+          </div>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -560,7 +648,7 @@ export default function AuthPage() {
                           ? "bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
                           : "bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
                       }`}
-                      disabled={loading}
+                      disabled={loading || !!configError}
                     >
                       {loading ? (
                         <div className="flex items-center space-x-2">
@@ -621,7 +709,7 @@ export default function AuthPage() {
                       variant="outline"
                       className="w-full transition-all duration-200 hover:scale-[1.02]"
                       onClick={handleGoogleSignIn}
-                      disabled={loading}
+                      disabled={loading || !!configError}
                       type="button"
                     >
                       <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
@@ -648,7 +736,7 @@ export default function AuthPage() {
                       variant="outline"
                       className="w-full transition-all duration-200 hover:scale-[1.02]"
                       onClick={handleTwitterSignIn}
-                      disabled={loading}
+                      disabled={loading || !!configError}
                       type="button"
                     >
                       <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
