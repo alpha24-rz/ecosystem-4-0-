@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Leaf, Mail, Lock, User, Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Leaf, Mail, Lock, User, Eye, EyeOff, AlertCircle, CheckCircle2, Shield } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { useAuthContext } from "@/components/auth/auth-provider"
@@ -24,6 +25,7 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const [isAdminLogin, setIsAdminLogin] = useState(false)
 
   // Form data
   const [formData, setFormData] = useState({
@@ -40,6 +42,12 @@ export default function AuthPage() {
       router.push("/")
     }
   }, [user, router])
+
+  // Check if email is admin email
+  const checkIfAdminEmail = (email: string) => {
+    const adminEmails = ["alfakiddrock7@gmail.com", "admin@ecosystem40.com", "superadmin@ecosystem40.com"]
+    return adminEmails.includes(email.toLowerCase())
+  }
 
   // Password strength calculation
   const getPasswordStrength = (password: string) => {
@@ -63,6 +71,11 @@ export default function AuthPage() {
       [name]: type === "checkbox" ? checked : value,
     }))
     setError("")
+
+    // Check if admin email for visual feedback
+    if (name === "email") {
+      setIsAdminLogin(checkIfAdminEmail(value))
+    }
   }
 
   const getFirebaseErrorMessage = (errorCode: string) => {
@@ -136,17 +149,47 @@ export default function AuthPage() {
 
       if (isLogin) {
         result = await signIn(formData.email, formData.password)
+
+        if (result.user && !result.error) {
+          // Check user role and redirect accordingly
+          const { checkAdminStatus } = await import("@/lib/admin-utils")
+          const adminStatus = await checkAdminStatus(result.user.uid)
+
+          if (adminStatus.isAdmin) {
+            setSuccess("Admin login successful! Redirecting to admin panel...")
+            setTimeout(() => {
+              router.push("/admin")
+            }, 1500)
+          } else {
+            setSuccess("Login successful! Redirecting...")
+            setTimeout(() => {
+              router.push("/dashboard")
+            }, 1500)
+          }
+        }
       } else {
         result = await signUp(formData.email, formData.password, formData.name.trim())
+
+        if (result.user && !result.error) {
+          // Check if this is an admin email and upgrade if needed
+          if (checkIfAdminEmail(formData.email)) {
+            const { createAdminUser } = await import("@/lib/admin-utils")
+            await createAdminUser(result.user.uid, formData.email, formData.name.trim(), "admin", "system")
+            setSuccess("Admin account created successfully! Redirecting to admin panel...")
+            setTimeout(() => {
+              router.push("/admin")
+            }, 1500)
+          } else {
+            setSuccess("Account created successfully! Redirecting...")
+            setTimeout(() => {
+              router.push("/dashboard")
+            }, 1500)
+          }
+        }
       }
 
       if (result.error) {
         setError(getFirebaseErrorMessage(result.error))
-      } else {
-        setSuccess(isLogin ? "Login successful! Redirecting..." : "Account created successfully! Redirecting...")
-        setTimeout(() => {
-          router.push("/")
-        }, 1500)
       }
     } catch (error: any) {
       setError(getFirebaseErrorMessage(error.code || error.message))
@@ -164,10 +207,21 @@ export default function AuthPage() {
       if (result.error) {
         setError(getFirebaseErrorMessage(result.error))
       } else {
-        setSuccess("Google sign-in successful! Redirecting...")
-        setTimeout(() => {
-          router.push("/")
-        }, 1500)
+        // Check user role and redirect accordingly
+        const { checkAdminStatus } = await import("@/lib/admin-utils")
+        const adminStatus = await checkAdminStatus(result.user!.uid)
+
+        if (adminStatus.isAdmin) {
+          setSuccess("Admin Google sign-in successful! Redirecting to admin panel...")
+          setTimeout(() => {
+            router.push("/admin")
+          }, 1500)
+        } else {
+          setSuccess("Google sign-in successful! Redirecting...")
+          setTimeout(() => {
+            router.push("/dashboard")
+          }, 1500)
+        }
       }
     } catch (error: any) {
       setError(getFirebaseErrorMessage(error.code || error.message))
@@ -185,10 +239,21 @@ export default function AuthPage() {
       if (result.error) {
         setError(getFirebaseErrorMessage(result.error))
       } else {
-        setSuccess("Twitter sign-in successful! Redirecting...")
-        setTimeout(() => {
-          router.push("/")
-        }, 1500)
+        // Check user role and redirect accordingly
+        const { checkAdminStatus } = await import("@/lib/admin-utils")
+        const adminStatus = await checkAdminStatus(result.user!.uid)
+
+        if (adminStatus.isAdmin) {
+          setSuccess("Admin Twitter sign-in successful! Redirecting to admin panel...")
+          setTimeout(() => {
+            router.push("/admin")
+          }, 1500)
+        } else {
+          setSuccess("Twitter sign-in successful! Redirecting...")
+          setTimeout(() => {
+            router.push("/dashboard")
+          }, 1500)
+        }
       }
     } catch (error: any) {
       setError(getFirebaseErrorMessage(error.code || error.message))
@@ -208,6 +273,7 @@ export default function AuthPage() {
       confirmPassword: "",
       acceptTerms: false,
     })
+    setIsAdminLogin(false)
   }
 
   return (
@@ -273,13 +339,38 @@ export default function AuthPage() {
 
                 {/* Header */}
                 <div className="text-center space-y-2">
-                  <h1 className="text-3xl font-bold">{isLogin ? "Welcome Back" : "Create Account"}</h1>
+                  <div className="flex items-center justify-center space-x-2">
+                    <h1 className="text-3xl font-bold">{isLogin ? "Welcome Back" : "Create Account"}</h1>
+                    {isAdminLogin && (
+                      <Badge
+                        variant="secondary"
+                        className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+                      >
+                        <Shield className="h-3 w-3 mr-1" />
+                        Admin
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-muted-foreground">
                     {isLogin
-                      ? "Sign in to continue your environmental journey"
-                      : "Join thousands making a difference for our planet"}
+                      ? isAdminLogin
+                        ? "Sign in to access the admin panel"
+                        : "Sign in to continue your environmental journey"
+                      : isAdminLogin
+                        ? "Create your admin account"
+                        : "Join thousands making a difference for our planet"}
                   </p>
                 </div>
+
+                {/* Admin Notice */}
+                {isAdminLogin && (
+                  <Alert className="border-purple-200 bg-purple-50 dark:border-purple-800 dark:bg-purple-900/20">
+                    <Shield className="h-4 w-4" />
+                    <AlertDescription className="text-purple-800 dark:text-purple-200">
+                      Admin access detected. You will be redirected to the admin panel after login.
+                    </AlertDescription>
+                  </Alert>
+                )}
 
                 {/* Error/Success Messages */}
                 {error && (
@@ -332,12 +423,17 @@ export default function AuthPage() {
                           name="email"
                           type="email"
                           placeholder="Enter your email"
-                          className="pl-10"
+                          className={`pl-10 ${isAdminLogin ? "border-purple-300 focus:border-purple-500" : ""}`}
                           value={formData.email}
                           onChange={handleInputChange}
                           required
                           disabled={loading}
                         />
+                        {isAdminLogin && (
+                          <div className="absolute right-3 top-3">
+                            <Shield className="h-4 w-4 text-purple-600" />
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -351,7 +447,7 @@ export default function AuthPage() {
                           name="password"
                           type={showPassword ? "text" : "password"}
                           placeholder={isLogin ? "Enter your password" : "Create a password"}
-                          className="pl-10 pr-10"
+                          className={`pl-10 pr-10 ${isAdminLogin ? "border-purple-300 focus:border-purple-500" : ""}`}
                           value={formData.password}
                           onChange={handleInputChange}
                           required
@@ -406,7 +502,7 @@ export default function AuthPage() {
                             name="confirmPassword"
                             type={showPassword ? "text" : "password"}
                             placeholder="Confirm your password"
-                            className="pl-10"
+                            className={`pl-10 ${isAdminLogin ? "border-purple-300 focus:border-purple-500" : ""}`}
                             value={formData.confirmPassword}
                             onChange={handleInputChange}
                             required={!isLogin}
@@ -459,16 +555,34 @@ export default function AuthPage() {
                     {/* Submit Button */}
                     <Button
                       type="submit"
-                      className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 transition-all duration-300 transform hover:scale-[1.02]"
+                      className={`w-full transition-all duration-300 transform hover:scale-[1.02] ${
+                        isAdminLogin
+                          ? "bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                          : "bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                      }`}
                       disabled={loading}
                     >
                       {loading ? (
                         <div className="flex items-center space-x-2">
                           <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          <span>{isLogin ? "Signing in..." : "Creating account..."}</span>
+                          <span>
+                            {isLogin
+                              ? isAdminLogin
+                                ? "Signing in to admin..."
+                                : "Signing in..."
+                              : isAdminLogin
+                                ? "Creating admin account..."
+                                : "Creating account..."}
+                          </span>
                         </div>
                       ) : isLogin ? (
-                        "Sign In"
+                        isAdminLogin ? (
+                          "Sign In to Admin Panel"
+                        ) : (
+                          "Sign In"
+                        )
+                      ) : isAdminLogin ? (
+                        "Create Admin Account"
                       ) : (
                         "Create Account"
                       )}

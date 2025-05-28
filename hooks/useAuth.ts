@@ -22,7 +22,9 @@ interface UserData {
   emailVerified: boolean
   createdAt?: string
   lastLoginAt?: string
-  role?: string
+  role?: "user" | "admin" | "super_admin"
+  permissions?: string[]
+  isActive?: boolean
 }
 
 export const useAuth = () => {
@@ -68,7 +70,9 @@ export const useAuth = () => {
           emailVerified,
           createdAt,
           lastLoginAt: createdAt,
-          role: "user",
+          role: "user", // Default role
+          permissions: ["read_projects", "participate_projects"],
+          isActive: true,
           ...additionalData,
         })
       } catch (error) {
@@ -113,6 +117,36 @@ export const useAuth = () => {
     }
   }
 
+  const adminSignIn = async (email: string, password: string) => {
+    try {
+      const { user } = await signInWithEmailAndPassword(auth, email, password)
+
+      // Check if user has admin role
+      const userDoc = await getDoc(doc(db, "users", user.uid))
+      if (userDoc.exists()) {
+        const userData = userDoc.data() as UserData
+        if (userData.role === "admin" || userData.role === "super_admin") {
+          await setDoc(
+            doc(db, "users", user.uid),
+            {
+              lastLoginAt: new Date().toISOString(),
+            },
+            { merge: true },
+          )
+          return { user, userData, error: null }
+        } else {
+          await signOut(auth)
+          return { user: null, userData: null, error: "Access denied. Admin privileges required." }
+        }
+      } else {
+        await signOut(auth)
+        return { user: null, userData: null, error: "User data not found." }
+      }
+    } catch (error: any) {
+      return { user: null, userData: null, error: error.message }
+    }
+  }
+
   const signInWithGoogle = async () => {
     try {
       const { user } = await signInWithPopup(auth, googleProvider)
@@ -151,15 +185,31 @@ export const useAuth = () => {
     }
   }
 
+  const isAdmin = () => {
+    return userData?.role === "admin" || userData?.role === "super_admin"
+  }
+
+  const isSuperAdmin = () => {
+    return userData?.role === "super_admin"
+  }
+
+  const hasPermission = (permission: string) => {
+    return userData?.permissions?.includes(permission) || false
+  }
+
   return {
     user,
     userData,
     loading,
     signUp,
     signIn,
+    adminSignIn,
     signInWithGoogle,
     signInWithTwitter,
     logout,
     resetPassword,
+    isAdmin,
+    isSuperAdmin,
+    hasPermission,
   }
 }

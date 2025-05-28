@@ -1,6 +1,7 @@
 import type React from "react"
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
 import { AdminHeader } from "@/components/admin/admin-header"
+import { ProtectedRoute } from "@/components/auth/protected-route"
 
 export default function AdminLayout({
   children,
@@ -8,12 +9,14 @@ export default function AdminLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <AdminSidebar />
-      <div className="lg:pl-64">
-        <AdminHeader />
-        <main className="p-6">{children}</main>
+    <ProtectedRoute requireAdmin={true} redirectTo="/admin/auth">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <AdminSidebar />
+        <div className="lg:pl-64">
+          <AdminHeader />
+          <main className="p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </ProtectedRoute>
   )
 }
