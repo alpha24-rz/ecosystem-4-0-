@@ -4,31 +4,23 @@ export const runtime = "edge"
 
 export async function POST(request: NextRequest) {
   try {
-    const data = await request.json()
+    const body = await request.json()
     const country = request.geo?.country || "Unknown"
     const region = request.geo?.region || "Unknown"
-    const city = request.geo?.city || "Unknown"
 
-    // Enhanced analytics data with geo information
-    const analyticsEvent = {
-      ...data,
-      geo: { country, region, city },
-      timestamp: Date.now(),
+    // In production, send to analytics service
+    const analyticsData = {
+      ...body,
+      timestamp: new Date().toISOString(),
+      geo: { country, region },
       userAgent: request.headers.get("user-agent"),
-      referer: request.headers.get("referer"),
     }
 
-    // In production, you'd send this to your analytics service
-    console.log("Analytics event:", analyticsEvent)
+    // Mock analytics processing
+    console.log("Analytics data:", analyticsData)
 
-    const response = NextResponse.json({ success: true })
-
-    // Don't cache analytics endpoints
-    response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate")
-
-    return response
+    return NextResponse.json({ success: true }, { status: 200 })
   } catch (error) {
-    console.error("Analytics error:", error)
-    return NextResponse.json({ error: "Analytics unavailable" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to process analytics" }, { status: 500 })
   }
 }

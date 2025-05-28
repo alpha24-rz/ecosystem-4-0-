@@ -4,36 +4,32 @@ export const runtime = "edge"
 
 export async function GET(request: NextRequest) {
   try {
-    // Get user's location for personalized config
-    const country = request.geo?.country || "US"
+    const country = request.geo?.country || "Unknown"
     const region = request.geo?.region || "Unknown"
 
-    // Lightweight config that can be cached at edge
     const config = {
-      environment: "production",
-      region,
-      country,
-      features: {
-        advancedAnalytics: true,
-        betaFeatures: country === "US", // Enable beta features for US users
-        realTimeNotifications: true,
-      },
-      cdn: {
-        imageOptimization: true,
-        staticAssetCaching: true,
-      },
+      environment: process.env.NODE_ENV || "development",
       timestamp: new Date().toISOString(),
+      geo: {
+        country,
+        region,
+      },
+      features: {
+        authentication: true,
+        nftMinting: true,
+        projectManagement: true,
+        analytics: true,
+      },
+      status: "operational",
     }
 
-    const response = NextResponse.json(config)
-
-    // Cache at edge for 1 hour
-    response.headers.set("Cache-Control", "public, max-age=3600, s-maxage=3600")
-    response.headers.set("CDN-Cache-Control", "max-age=3600")
-
-    return response
+    return NextResponse.json(config, {
+      headers: {
+        "Cache-Control": "public, max-age=3600, s-maxage=3600",
+        "Content-Type": "application/json",
+      },
+    })
   } catch (error) {
-    console.error("Edge config error:", error)
-    return NextResponse.json({ error: "Configuration unavailable" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to fetch configuration" }, { status: 500 })
   }
 }

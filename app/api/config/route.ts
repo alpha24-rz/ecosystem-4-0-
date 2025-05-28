@@ -1,25 +1,30 @@
 import { NextResponse } from "next/server"
-import { env } from "@/lib/env"
+import { logger } from "@/lib/logger"
 
 export async function GET() {
   try {
-    // This endpoint can use the CUSTOM_KEY for various purposes
-    // For example: API authentication, feature flags, etc.
+    logger.info("Config API endpoint accessed")
 
     const config = {
-      environment: env.nodeEnv,
-      features: {
-        // Use CUSTOM_KEY to enable/disable features
-        advancedAnalytics: env.customKey === "advanced_features_enabled",
-        betaFeatures: env.customKey === "beta_access_granted",
-        // Add more feature flags based on your CUSTOM_KEY value
-      },
+      environment: process.env.NODE_ENV || "development",
       timestamp: new Date().toISOString(),
+      version: "1.0.0",
+      features: {
+        authentication: true,
+        nftMinting: true,
+        projectManagement: true,
+        analytics: true,
+      },
+      status: "operational",
     }
 
-    return NextResponse.json(config)
+    return NextResponse.json(config, {
+      headers: {
+        "Cache-Control": "public, max-age=300, s-maxage=300",
+      },
+    })
   } catch (error) {
-    console.error("Error fetching config:", error)
+    logger.error("Config API error", { error: error instanceof Error ? error.message : "Unknown error" })
     return NextResponse.json({ error: "Failed to fetch configuration" }, { status: 500 })
   }
 }

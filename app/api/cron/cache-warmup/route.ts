@@ -2,33 +2,39 @@ import { NextResponse } from "next/server"
 
 export async function GET() {
   try {
+    // Warm up critical endpoints
+    const endpoints = ["/api/config", "/api/projects?limit=10", "/api/nfts?limit=10", "/api/articles?limit=5"]
+
     const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"
 
-    // Warm up critical pages and API endpoints
-    const urlsToWarm = ["/", "/projects", "/nfts", "/learn", "/api/edge/config", "/api/projects", "/api/nfts"]
-
-    const warmupPromises = urlsToWarm.map(async (url) => {
+    const promises = endpoints.map(async (endpoint) => {
       try {
-        const response = await fetch(`${baseUrl}${url}`, {
-          headers: { "User-Agent": "Vercel-Cache-Warmup" },
-        })
-        return { url, status: response.status, success: response.ok }
+        const response = await fetch(`${baseUrl}${endpoint}`)
+        return { endpoint, status: response.status, success: response.ok }
       } catch (error) {
-        return { url, status: 0, success: false, error: error.message }
+        return {
+          endpoint,
+          status: 500,
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        }
       }
     })
 
-    const results = await Promise.all(warmupPromises)
-
-    console.log("Cache warmup completed:", results)
+    const results = await Promise.all(promises)
 
     return NextResponse.json({
       success: true,
-      warmedUrls: results.length,
+      timestamp: new Date().toISOString(),
       results,
     })
   } catch (error) {
-    console.error("Cache warmup failed:", error)
-    return NextResponse.json({ error: "Cache warmup failed" }, { status: 500 })
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Cache warmup failed",
+      },
+      { status: 500 },
+    )
   }
 }

@@ -8,32 +8,30 @@ export async function GET(request: NextRequest) {
     const id = searchParams.get("id")
 
     if (!id) {
-      return NextResponse.json({ error: "NFT ID required" }, { status: 400 })
+      return NextResponse.json({ error: "NFT ID is required" }, { status: 400 })
     }
 
-    // Lightweight NFT metadata that can be cached
+    // Mock NFT metadata - in production, fetch from database
     const metadata = {
       id,
       name: `Environmental NFT #${id}`,
       description: "A unique environmental conservation NFT",
-      image: `/api/nfts/${id}/image`,
+      image: `/placeholder.svg?height=400&width=400`,
       attributes: [
+        { trait_type: "Category", value: "Tree Planting" },
         { trait_type: "Rarity", value: "Common" },
-        { trait_type: "Environmental Impact", value: "High" },
-        { trait_type: "Carbon Offset", value: "1.5 tons" },
+        { trait_type: "Impact", value: "High" },
       ],
-      external_url: `${request.nextUrl.origin}/nfts/${id}`,
+      external_url: `https://ecosystem40.com/nfts/${id}`,
     }
 
-    const response = NextResponse.json(metadata)
-
-    // Cache NFT metadata for 24 hours
-    response.headers.set("Cache-Control", "public, max-age=86400, s-maxage=86400")
-    response.headers.set("CDN-Cache-Control", "max-age=86400")
-
-    return response
+    return NextResponse.json(metadata, {
+      headers: {
+        "Cache-Control": "public, max-age=86400, s-maxage=86400",
+        "Content-Type": "application/json",
+      },
+    })
   } catch (error) {
-    console.error("NFT metadata error:", error)
-    return NextResponse.json({ error: "Metadata unavailable" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to fetch NFT metadata" }, { status: 500 })
   }
 }

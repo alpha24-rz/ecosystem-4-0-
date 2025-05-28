@@ -1,7 +1,3 @@
-"use client"
-
-import React from "react"
-
 interface CacheItem<T> {
   data: T
   timestamp: number
@@ -11,20 +7,20 @@ interface CacheItem<T> {
 class ClientCache {
   private cache = new Map<string, CacheItem<any>>()
 
-  set<T>(key: string, data: T, ttlSeconds = 300): void {
+  set<T>(key: string, data: T, ttlMs = 300000): void {
     this.cache.set(key, {
       data,
       timestamp: Date.now(),
-      ttl: ttlSeconds * 1000,
+      ttl: ttlMs,
     })
   }
 
   get<T>(key: string): T | null {
     const item = this.cache.get(key)
-
     if (!item) return null
 
-    if (Date.now() - item.timestamp > item.ttl) {
+    const now = Date.now()
+    if (now - item.timestamp > item.ttl) {
       this.cache.delete(key)
       return null
     }
@@ -32,43 +28,39 @@ class ClientCache {
     return item.data
   }
 
-  clear(): void {
-    this.cache.clear()
-  }
-
   delete(key: string): void {
     this.cache.delete(key)
   }
 
-  // Cache with stale-while-revalidate pattern
-  async getOrFetch<T>(key: string, fetcher: () => Promise<T>, ttlSeconds = 300): Promise<T> {
+  clear(): void {
+    this.cache.clear()
+  }
+
+  // Get with stale-while-revalidate pattern
+  async getOrFetch<T>(key: string, fetcher: () => Promise<T>, ttlMs = 300000): Promise<T> {
     const cached = this.get<T>(key)
+    if (cached) return cached
 
-    if (cached) {
-      return cached
+    try {
+      const data = await fetcher()
+      this.set(key, data, ttlMs)
+      return data
+    } catch (error) {
+      // Return stale data if available
+      const stale = this.cache.get(key)
+      if (stale) return stale.data
+      throw error
     }
-
-    const data = await fetcher()
-    this.set(key, data, ttlSeconds)
-    return data
   }
 }
 
-export const clientCache = new ClientCache()
+export const cache = new ClientCache()
 
-// React hook for cached data fetching
-export function useCachedFetch<T>(key: string, fetcher: () => Promise<T>, ttlSeconds = 300) {
-  const [data, setData] = React.useState<T | null>(null)
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<Error | null>(null)
-
-  React.useEffect(() => {
-    clientCache
-      .getOrFetch(key, fetcher, ttlSeconds)
-      .then(setData)
-      .catch(setError)
-      .finally(() => setLoading(false))
-  }, [key, ttlSeconds])
-
-  return { data, loading, error }
+// Utility functions for common cache patterns
+export const cacheKeys = {
+  user: (id: string) => `user:${id}`,
+  project: (id: string) => `project:${id}`,
+  nft: (id: string) => `nft:${id}`,
+  projects: (page: number, limit: number) => `projects:${page}:${limit}`,
+  nfts: (page: number, limit: number) => `nfts:${page}:${limit}`,
 }
