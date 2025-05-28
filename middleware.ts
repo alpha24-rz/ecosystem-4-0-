@@ -1,28 +1,37 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
-const protectedRoutes = ["/profile", "/admin"]
+export function middleware(request: NextRequest) {
+  // Get the pathname of the request (e.g. /, /dashboard, /admin)
+  const path = request.nextUrl.pathname
 
-export function middleware(req: NextRequest) {
-  const basicAuth = req.headers.get("authorization")
-  const url = req.nextUrl
+  // Define protected routes
+  const protectedRoutes = ["/dashboard", "/admin"]
+  const adminRoutes = ["/admin"]
 
-  if (basicAuth) {
-    const authValue = basicAuth.split(" ")[1]
-    const [user, pwd] = atob(authValue).split(":")
+  // Check if the current path is protected
+  const isProtectedRoute = protectedRoutes.some((route) => path.startsWith(route))
+  const isAdminRoute = adminRoutes.some((route) => path.startsWith(route))
 
-    if (user === process.env.BASIC_AUTH_USER && pwd === process.env.BASIC_AUTH_PASSWORD) {
-      return NextResponse.next()
-    }
-  }
-
-  if (protectedRoutes.includes(url.pathname)) {
-    return NextResponse.redirect(new URL("/api/auth", req.url))
+  // For now, we'll handle client-side authentication
+  // In a production app, you might want to verify the Firebase token here
+  if (isProtectedRoute) {
+    // Let the client-side handle the authentication check
+    return NextResponse.next()
   }
 
   return NextResponse.next()
 }
 
 export const config = {
-  matcher: ["/profile/:path*", "/admin/:path*"],
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    "/((?!api|_next/static|_next/image|favicon.ico).*)",
+  ],
 }
