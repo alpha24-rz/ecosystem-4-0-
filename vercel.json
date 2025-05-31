@@ -1,0 +1,47 @@
+{
+  "functions": {
+    "app/api/edge/**": {
+      "runtime": "edge"
+    }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "origin-when-cross-origin"
+        }
+      ]
+    },
+    {
+      "source": "/api/edge/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=3600"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/nft-metadata/:id",
+      "destination": "/api/edge/nfts/metadata?id=:id"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/cache-warmup",
+      "schedule": "0 */6 * * *"
+    }
+  ]
+}
